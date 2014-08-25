@@ -72,97 +72,122 @@ var mixinLoopback = function(client, model, settings) {
   };
 
   model.prototype.idAttribute = LoopbackModel.definition.idName() || 'id';
-
-  _.each(LoopbackModel.relations, function(rel, name) {
-
-    if (!rel.multiple) return; // only handle collections for now
-
-    model.prototype[rel.name] = (function(rel) {
-      return function(query, cb) {
-        if (_.isFunction(query)) cb = query, query = {};
-        var reset = query === true;
-        query = _.isObject(query) ? query : {};
-        var collection;
-        var relatedModel = rel.modelTo;
-        if (relatedModel && relatedModel.backbone) {
-          var relCollection = relatedModel.backbone.Collection;
-          var relModel = relatedModel.backbone;
-        } else {
-          var relCollection = Backbone.Collection;
-          var relModel = Backbone.Model;
+  
+  var proxyForRelation = function(backboneModel, relationName) {
+    var relations = backboneModel.constructor.loopback.relations || {};
+    var rel = relations[relationName];
+    if (!rel) return;
+    
+    var relatedModel = rel.modelTo;
+    if (relatedModel && relatedModel.backbone) {
+      var relCollection = relatedModel.backbone.Collection;
+      var relModel = relatedModel.backbone;
+    } else {
+      var relCollection = Backbone.Collection;
+      var relModel = Backbone.Model;
+    }
+    
+    if (rel.multiple) {
+      return relCollection.extend({
+        rel: backboneModel.dao[rel.name],
+        instance: backboneModel,
+        model: relModel,
+        relation: rel,
+        
+        filter: function(query, cb) {
+          if (_.isFunction(query)) cb = query, query = {};
+          query = _.isObject(query) ? query : {};
+          var collection = this;
+          // reset comparator if explicit order is given
+          if (!_.isEmpty(query.order)) this.comparator = null;
+          return returnPromise(function(done) {
+            collection.rel(query, function(err, instances) {
+              collection.reset(instances || []);
+              done(err, collection);
+            });
+          }, cb);
+        },
+        
+        build: function(attrs, options) {
+          var sample = this.rel.build({}).toObject();
+          return new this.model(_.extend({}, sample, attrs), options);
+        },
+        
+        create: function(model, options) {
+          options = options ? _.clone(options) : {};
+          if (!(model = this._prepareModel(model, options))) return false;
+          if (!options.wait) this.add(model, options);
+          var collection = this;
+          var success = options.success;
+          options.success = function(model, resp) {
+            if (options.wait) collection.add(model, options);
+            if (success) success(model, resp, options);
+          };
+          var dfd = options.wait ? $.Deferred() : null;
+          this.rel.create(model.toJSON(), function(err, inst) {
+            if (err) {
+              if (options.error) options.error(err);
+              if (dfd) dfd.reject(err);
+            } else {
+              var attrs = inst.toObject();
+              model.set(attrs);
+              if (options.success) options.success(model, attrs);
+              if (dfd) dfd.resolve(model);
+            }
+          });
+          return dfd ? dfd.promise() : model;
+        },
+        
+        // TODO move this to a base collection class
+        _prepareModel: function(attrs, options) {
+          attrs = attrs.toObject ? attrs.toObject() : attrs;
+          return relCollection.prototype._prepareModel.call(this, attrs, options);
         }
-        return returnPromise(function(done) {
-          var self = this;
-          self.__cachedRelations = self.__cachedRelations || {};
+      });
+    } else {
+      // TODO
+    }
+  };
+  
+  _.each(LoopbackModel.relations, function(rel, name) {
+    if (rel.multiple) {
+      model.prototype[rel.name] = (function(rel) {
+        return function(query, cb) {
+          if (_.isFunction(query)) cb = query, query = {};
+          var reset = query === true;
+          query = _.isObject(query) ? query : {};
+          
+          var Collection = new proxyForRelation(this, rel.name);
+          
+          this.__cachedRelations = this.__cachedRelations || {};
 
-          collection = self.__cachedRelations[rel.name];
+          var collection = this.__cachedRelations[rel.name];
 
-          if (reset === true && collection) {
+          if (reset === true && collection instanceof Collection) {
             collection.reset();
-          } else if (_.isEmpty(query) && collection) {
+          } else if (_.isEmpty(query) && collection instanceof Collection) {
             return done(null, collection);
           }
 
-          collection = collection || new relCollection();
-
-          self.__cachedRelations[rel.name] = collection;
-
-          // TODO collection._prepareModel
-
-          collection.build = function(attrs, options) {
-            var proto = self.dao[rel.name].build({}).toObject();
-            return new relModel(_.extend({}, proto, attrs), options);
-          };
-
-          collection.create = function(model, options) {
-            options = options ? _.clone(options) : {};
-            if (!(model = this._prepareModel(model, options))) return false;
-            if (!options.wait) this.add(model, options);
-            var collection = this;
-            var success = options.success;
-            options.success = function(model, resp) {
-              if (options.wait) collection.add(model, options);
-              if (success) success(model, resp, options);
-            };
-            var dfd = options.wait ? $.Deferred() : null;
-            self.dao[rel.name].create(model.toJSON(), function(err, inst) {
-              if (err) {
-                if (options.error) options.error(err);
-                if (dfd) dfd.reject(err);
-              } else {
-                var attrs = inst.toObject();
-                model.set(attrs);
-                if (options.success) options.success(model, attrs); // raw
-                if (dfd) dfd.resolve(model); // model
-              }
-            });
-            return dfd ? dfd.promise() : model;
-          };
-
-          // reset comparator if explicit order is given
-          if (!_.isEmpty(query.order)) collection.comparator = null;
-
-          // pre-cached values on dao - from inclusion
-          if (_.isEmpty(query) && self.dao.__cachedRelations
-            && self.dao.__cachedRelations[name]) {
-              collection.comparator = null; // reset
-              var instances = self.dao.__cachedRelations[name];
-              collection.reset(instances.map(function(inst) {
-                return inst.toObject ? inst.toObject() : inst;
-              }), { silent: true });
-              return done(null, collection);
-          }
-
-          this.dao[rel.name](query, function(err, instances) {
-            if (err || _.isEmpty(instances)) return done(err, collection);
-            collection.reset(instances.map(function(inst) {
-              return inst.toObject ? inst.toObject() : inst;
-            }), { silent: true });
-            done(err, collection);
-          });
-        }, cb, this);
-      };
-    }(rel));
+          collection = collection || new Collection();
+          this.__cachedRelations[rel.name] = collection;
+          
+          return returnPromise(function(done) {
+            // pre-cached values on dao - from inclusion
+            if (_.isEmpty(query) && this.dao.__cachedRelations
+              && _.isArray(this.dao.__cachedRelations[name])) {
+                collection.comparator = null; // reset
+                var instances = this.dao.__cachedRelations[name];
+                collection.reset(instances);
+                return done(null, collection);
+            }
+            collection.filter(query, done);
+          }, cb, this);
+        };
+      }(rel));
+    } else {
+      // TODO
+    }
   });
 
   Object.defineProperty(model.prototype, 'dao', {

@@ -7,6 +7,12 @@ describe('Relations', function() {
   
   Todo.Collection.prototype.comparator = 'created';
   
+  // TODO:
+  //
+  // user.todos.find()
+  // user.todos.build()
+  // user.todos.create()
+  
   var user, collection;
   var ids = {};
   
