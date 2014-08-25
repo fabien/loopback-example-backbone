@@ -1,14 +1,12 @@
 # LoopBack Backbone SDK W.I.P.
 
-This project integrates LoopBack and Backbone, by leveraging the LoopBack client models.
+This project integrates LoopBack and Backbone, by leveraging the LoopBack client and the defined models.
 
 For now, the core functionality is at `/client/lblclient/boot/backbone.js` (to be refactored).
 
 There's a fairly complete test-suite (Mocha/Chai-based) at `/client/bbapp/test` available as well.
 
-The implementation tries to follow Backbone conventions as closely as possible, providing $.Deferred promises where appropriate.
-
-However, a few convenience methods have been added, that mimic LoopBack methods, while returning Backbone Model or Collection objects:
+The implementation tries to follow Backbone conventions as closely as possible, providing $.Deferred promises where appropriate. However, a few convenience methods have been added, that mimic LoopBack methods, while returning Backbone Model or Collection objects.
 
 Some examples:
 
@@ -64,13 +62,10 @@ Run `npm install` and `bower install`. Then try `npm test`.
 
 ### TODO
 
-- proper documentation
-- bring the project up to par with loopback-example-full-stack
+- proper documentation - see also: Usage.md
+- bring the example up to par with loopback-example-full-stack
 - complete this project into a proper TodoMVC-type Backbone app
 - only relations of type 'multiple' are handled at the moment
 - properly handle the restApiUrl for the test environment
 - refactor mixinLoopback into seperate Model and Collection mixins
 - export mixinLoopback as a helper method
-
-
-
