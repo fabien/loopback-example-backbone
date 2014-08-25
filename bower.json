@@ -1,0 +1,26 @@
+{
+  "name": "loopback-example-backbone",
+  "version": "0.0.0",
+  "homepage": "https://github.com/strongloop/loopback-example-backbone",
+  "authors": [
+    "Fabien Franzen <info@atelierfabien.be>"
+  ],
+  "license": "MIT",
+  "private": true,
+  "appPath": "client/bbapp",
+  "testPath": "client/bbapp/test/spec",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "**/bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "es5-shim": "~3.1.0",
+    "json3": "~3.3.2",
+    "jquery": "~2.1.1",
+    "backbone": "~1.1.2"
+  },
+  "devDependencies": {}
+}

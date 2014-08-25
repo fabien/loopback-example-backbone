@@ -1,0 +1,11 @@
+{
+  "name": "LocalUser",
+  "base": "User",
+  "relations": {
+    "todos": {
+      "type": "hasMany",
+      "model": "LocalTodo",
+      "foreignKey": "userId"
+    }
+  }
+}

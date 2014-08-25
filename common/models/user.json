@@ -1,0 +1,12 @@
+{
+  "name": "User",
+  "plural": "users",
+  "base": "PersistedModel",
+  "trackChanges": false,
+  "properties": {
+    "name": { 
+      "type": "string",
+      "required": true
+    }
+  }
+}

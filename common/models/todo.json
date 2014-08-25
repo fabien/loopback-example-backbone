@@ -1,0 +1,23 @@
+{
+  "name": "Todo",
+  "plural": "todos",
+  "base": "PersistedModel",
+  "trackChanges": false,
+  "properties": {
+    "id": {
+      "id": true,
+      "type": "string"
+    },
+    "title": { 
+      "type": "string",
+      "required": true
+    },
+    "completed": {
+      "type": "boolean",
+      "default": false
+    },
+    "created": {
+      "type": "number"
+    }
+  }
+}
