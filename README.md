@@ -83,3 +83,4 @@ Run `npm install` and `bower install`. Then try `npm test`.
 - properly handle the restApiUrl for the test environment
 - refactor mixinLoopback into seperate Model and Collection mixins
 - export mixinLoopback as a helper method
+- implement a light-weight companion SDK using the remote REST API only
