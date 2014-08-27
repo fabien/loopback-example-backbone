@@ -128,6 +128,25 @@ describe('Backbone', function() {
     });
   });
   
+  it('should implement findOne - callback', function(done) {
+    Todo.findOne({ where: { title: 'Todo A' } }, function(err, todo) {
+      should.not.exist(err);
+      todo.should.be.instanceof(Todo);
+      todo.id.should.equal(ids.todoA);
+      todo.get('title').should.equal('Todo A');
+      done();
+    });
+  });
+  
+  it('should implement findOne - promise', function(done) {
+    Todo.findOne({ where: { title: 'Todo A' } }).done(function(todo) {
+      todo.should.be.instanceof(Todo);
+      todo.id.should.equal(ids.todoA);
+      todo.get('title').should.equal('Todo A');
+      done();
+    });
+  });
+  
   it('should implement find and return a collection - callback', function(done) {
     Todo.find(function(err, todos) {
       should.not.exist(err);

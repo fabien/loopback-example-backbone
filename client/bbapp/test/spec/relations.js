@@ -170,7 +170,15 @@ describe('Relations', function() {
         done();
       });
     });
-  
+    
+    it('should implement `findOne` on a relation collection - callback', function(done) {
+      user.todos.findOne({ where: { completed: true } }).done(function(todo) {
+        todo.should.be.instanceof(Todo);
+        todo.get('title').should.equal('Todo 2');
+        done();
+      });
+    });
+    
     it('should query a relation collection - promise', function(done) {
       user.todos.query({ where: { completed: true } }).done(function(todos) {
         todos.should.not.equal(collection); // new, independent collection
@@ -222,6 +230,18 @@ describe('Relations', function() {
         json.todos[1].title.should.equal('Todo 2');
         user.todos.at(0).get('title').should.equal('Todo 1');
         user.todos.at(1).get('title').should.equal('Todo 2');
+        done();
+      });
+    });
+    
+    it('should implement findOne - inclusion', function(done) {
+      Todo.findOne({ where: { completed: true }, include: 'user' }).done(function(todo) {
+        todo.should.be.instanceof(Todo);
+        todo.get('title').should.equal('Todo 2');
+        
+        json = todo.toJSON({ include: true });
+        json.title.should.equal('Todo 2');
+        json.user.should.eql({ id: user.id, name: 'fred' });
         done();
       });
     });

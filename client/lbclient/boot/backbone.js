@@ -59,7 +59,18 @@ var mixinLoopback = function(client, model, settings) {
   model.find = function(query, cb) {
     return this.Collection.find.apply(this.Collection, arguments);
   };
-
+  
+  model.findOne = function(query, cb) {
+    if (_.isFunction(query)) cb = query, query = {};
+    var backboneModel = this;
+    return returnPromise(function(done) {
+      this.loopback.findOne(query || {}, function(err, inst) {
+        var m = inst ? new backboneModel(inst.toObject()) : null;
+        done(err, m);
+      });
+    }, cb, this);
+  };
+  
   model.findById = function(id, options, cb) {
     if (_.isFunction(options)) cb = options, options = {};
     options = options ? _.clone(options) : {};
@@ -102,6 +113,18 @@ var mixinLoopback = function(client, model, settings) {
         instance: backboneModel,
         model: relModel,
         relation: rel,
+        
+        findOne: function(query, cb) {
+          if (_.isFunction(query)) cb = query, query = {};
+          query = _.isObject(query) ? query : {};
+          var Model = this.model;
+          return returnPromise(function(done) {
+            this.rel(_.extend(query, { limit: 1 }), function(err, instances) {
+              if (err || !instances[0]) return done(err, null);
+              done(err, new Model(instances[0].toObject()));
+            });
+          }, cb, this);
+        },
         
         query: function(query, cb) {
           if (_.isFunction(query)) cb = query, query = {};
@@ -154,7 +177,6 @@ var mixinLoopback = function(client, model, settings) {
           return dfd ? dfd.promise() : model;
         },
         
-        // TODO move this to a base collection class
         _prepareModel: function(attrs, options) {
           attrs = attrs.toObject ? attrs.toObject() : attrs;
           return relCollection.prototype._prepareModel.call(this, attrs, options);
