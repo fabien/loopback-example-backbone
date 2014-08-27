@@ -1,3 +1,7 @@
+# Browser examples
+
+``` javascript
+
 var Todo = client.backbone.Todo;
 
 var todo = new Todo({ title: 'Todo 1', created: '1234', userId: 1 });
@@ -66,7 +70,7 @@ var User = models.User;
 
 var user = new User({ id: 1, name: 'fred' });
 
-user.todos({ limit: 5 }).done(function(todos) {
+user.todos.query({ limit: 5 }).done(function(todos) {
   console.log('IS COLLECTION:', todos instanceof Todo.Collection);
   console.log("USER TODOS COLLECTION:", todos.pluck('id'));
   console.log('INCLUDE IN JSON:', user.toJSON({ include: true }))
@@ -98,3 +102,5 @@ collection.fetch({ limit: 4 }).done(function() {
     console.log("CREATE ON COLLECTION", collection.pluck('id'))
   }});
 });
+
+```
