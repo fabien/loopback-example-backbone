@@ -27,7 +27,7 @@ Todo.find({ where: { completed: true } }).done(function(todos) {
 
 User.findById(3).done(function(user) {
   // relation accessors return collections
-  user.todos({ where: { completed: true } }).done(function(todos) {
+  user.todos.query({ where: { completed: true } }).done(function(todos) {
     console.log(todos instanceof Todo.Collection); // true
     console.log(todos.at(0).get('title')); // Todo 1
     console.log(user.toJSON({ include: true })); // { ..., todos: [...] }

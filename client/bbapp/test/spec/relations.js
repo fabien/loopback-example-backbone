@@ -266,20 +266,40 @@ describe('Relations', function() {
     it('should resolve a relation - reset', function(done) {
       todo.user.resolve({ reset: true }).done(function(user) {
         user.should.not.equal(cached); // not cached
+        cached = user;
         user.should.be.instanceof(User);
         user.get('name').should.equal('fred');
         done();
       });
     });
     
-    it('should implement `build` on a relation collection', function() {
+    it('should include a relation in JSON', function(done) {
+      todo.user.fetch().done(function(user) { // fetch === resolve
+        user.should.equal(cached); // cached
+        var json = todo.toJSON({ include: true });
+        json.title.should.equal('Todo 1');
+        json.user.should.eql({ id: user.id, name: 'fred' });
+        done();
+      });
+    });
+    
+    it('should allow findById to include related items', function(done) {
+      Todo.findById(todo.id, { include: 'user' }).done(function(todo) {
+        var json = todo.toJSON({ include: ['user'] });
+        json.title.should.equal('Todo 1');
+        json.user.should.eql({ id: user.id, name: 'fred' });
+        done();
+      });
+    });
+    
+    it('should implement `build` on a relation', function() {
       var user = new Todo().user.build({ name: 'Wilma' });
       user.isNew().should.be.true;
       user.should.be.instanceof(User);
     });
     
     it('should implement `create` on a relation - wait/promise', function(done) {
-      todo = new Todo({ title: 'Some errand' });
+      todo = new Todo({ title: 'Some task' });
       todo.save().done(function(todo) {
         todo.isNew().should.be.false;
         
@@ -305,6 +325,7 @@ describe('Relations', function() {
           todos.should.be.instanceof(Todo.Collection);
           todos.length.should.equal(1);
           todos.pluck('id').should.eql([todo.id]);
+          todos.pluck('title').should.eql(['Some task']);
           done();
         });
       });

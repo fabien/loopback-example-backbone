@@ -174,13 +174,19 @@ var mixinLoopback = function(client, model, settings) {
         } else {
           this.rel(function(err, resp) {
             if (err) return cb(err, null);
-            var model = self.related = new self.model(resp);
+            var model = self.related = new self.model(resp.toObject());
             cb(err, model, resp);
           });
         }
       };
       
-      var Proxy = function RelationProxy() {};
+      var Proxy = function RelationProxy(attrs) {
+        if (_.isObject(attrs) && !_.isEmpty(attrs)) {
+          attrs = attrs.toObject ? attrs.toObject() : attrs;
+          this.related = new this.model(attrs);
+        }
+      };
+      
       _.extend(Proxy.prototype, {
         rel: backboneModel.dao[rel.name],
         instance: backboneModel,
@@ -242,6 +248,12 @@ var mixinLoopback = function(client, model, settings) {
           });
           
           return dfd ? dfd.promise() : model;
+        },
+        
+        toJSON: function(options) {
+          if (this.related && this.related.toJSON) {
+            return this.related.toJSON(options);
+          }
         }
         
       });
@@ -257,7 +269,7 @@ var mixinLoopback = function(client, model, settings) {
         if (!relation) {
           var cached = this.dao.__cachedRelations || {};
           var attrs = rel.embed ? this.get(rel.name) : cached[rel.name];
-          attrs = attrs || (rel.multiple ? [] : {});
+          attrs = attrs || (rel.multiple ? [] : null);
           var Proxy = proxyForRelation(this, rel.name);
           relation = new Proxy(attrs);
           if (rel.embed) relation.resolved = true;
