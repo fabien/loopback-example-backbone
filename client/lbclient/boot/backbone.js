@@ -1,5 +1,9 @@
-module.exports = function(client) {
+var utils = require('loopback-datasource-juggler/lib/utils');
 
+module.exports = function(client) {
+  
+  
+  
   var models = client.backbone = {};
   
   // TODO: MERGE model.settings.backbone.model backbone.collection
@@ -17,6 +21,12 @@ var mixinLoopback = function(client, model, settings) {
   settings || (settings = {});
   var LoopbackModel = client.models[model.modelName];
   if (!LoopbackModel || model.loopback) return;
+  
+  var originalInitialize = model.prototype.initialize;
+  model.prototype.initialize = function(attributes, options) {
+    this.__relations = this.__relations || {};
+    originalInitialize.apply(this, arguments);
+  };
 
   Object.defineProperty(LoopbackModel, 'backbone', {
     value: model,
@@ -60,7 +70,6 @@ var mixinLoopback = function(client, model, settings) {
         if (_.isString(options.include) 
           || _.isArray(options.include) 
           || _.isObject(options.include)) {
-          m.__cachedRelations = m.__cachedRelations || {};
           backboneModel.loopback.include([m.dao], options.include, function(err) {
             done(err, m);
           });
@@ -94,12 +103,12 @@ var mixinLoopback = function(client, model, settings) {
         model: relModel,
         relation: rel,
         
-        filter: function(query, cb) {
+        query: function(query, cb) {
           if (_.isFunction(query)) cb = query, query = {};
           query = _.isObject(query) ? query : {};
-          var collection = this;
+          var collection = new this.constructor();
           // reset comparator if explicit order is given
-          if (!_.isEmpty(query.order)) this.comparator = null;
+          if (!_.isEmpty(query.order)) collection.comparator = null;
           return returnPromise(function(done) {
             collection.rel(query, function(err, instances) {
               collection.reset(instances || []);
@@ -145,49 +154,33 @@ var mixinLoopback = function(client, model, settings) {
         }
       });
     } else {
-      // TODO
+      console.log('Relation type not implemented: ' + rel.type);
     }
   };
   
   _.each(LoopbackModel.relations, function(rel, name) {
-    if (rel.multiple) {
-      model.prototype[rel.name] = (function(rel) {
-        return function(query, cb) {
-          if (_.isFunction(query)) cb = query, query = {};
-          var reset = query === true;
-          query = _.isObject(query) ? query : {};
-          
-          var Collection = new proxyForRelation(this, rel.name);
-          
-          this.__cachedRelations = this.__cachedRelations || {};
-
-          var collection = this.__cachedRelations[rel.name];
-
-          if (reset === true && collection instanceof Collection) {
-            collection.reset();
-          } else if (_.isEmpty(query) && collection instanceof Collection) {
-            return done(null, collection);
-          }
-
-          collection = collection || new Collection();
-          this.__cachedRelations[rel.name] = collection;
-          
-          return returnPromise(function(done) {
-            // pre-cached values on dao - from inclusion
-            if (_.isEmpty(query) && this.dao.__cachedRelations
-              && _.isArray(this.dao.__cachedRelations[name])) {
-                collection.comparator = null; // reset
-                var instances = this.dao.__cachedRelations[name];
-                collection.reset(instances);
-                return done(null, collection);
-            }
-            collection.filter(query, done);
-          }, cb, this);
-        };
-      }(rel));
-    } else {
-      // TODO
-    }
+    var getterFn = function(rel) {
+      return function() {
+        this.__relations = this.__relations || {};
+        var relation = this.__relations[rel.name];
+        if (!relation) {
+          var cached = this.dao.__cachedRelations || {};
+          var attrs = rel.embed ? this.get(rel.name) : cached[rel.name];
+          attrs = attrs || (rel.multiple ? [] : {});
+          var Proxy = proxyForRelation(this, rel.name);
+          relation = new Proxy(attrs);
+          if (rel.embed) relation.resolved = true;
+          this.__relations[rel.name] = relation;
+        }
+        return relation;
+      };
+    };
+    
+    Object.defineProperty(model.prototype, rel.name, {
+      enumerable: true,
+      configurable: true,
+      get: getterFn(rel)
+    });
   });
 
   Object.defineProperty(model.prototype, 'dao', {
@@ -205,6 +198,44 @@ var mixinLoopback = function(client, model, settings) {
     get: function() { return this.dao; },
     set: function(attrs) { this.dao = attrs; }
   });
+  
+  var originalSet = model.prototype.set;
+  model.prototype.set = function(key, val, options) {
+    if (key == null) return this;
+    
+    // Handle both `"key", value` and `{key: value}` -style arguments.
+    if (typeof key === 'object') {
+      attrs = key;
+      options = val;
+    } else {
+      (attrs = {})[key] = val;
+    }
+    
+    options || (options = {});
+    
+    var self = this;
+    var relations = this.constructor.loopback.relations || {};
+    
+    var relNames = [];
+    _.each(relations, function(rel) {
+      if (!rel.embed) relNames.push(rel.name);
+    });
+    
+    _.each(_.intersection(relNames, _.keys(attrs)), function(name) {
+      var multiple = relations[name].multiple;
+      val = attrs[name];
+      if (val.toJSON) val = val.toJSON();
+      if (multiple && !_.isArray(val)) {
+        val = [];
+      } else if (!_.isObject(val)) {
+        val = {};
+      }
+      utils.defineCachedRelations(self.dao);
+      self.dao.__cachedRelations[name] = val;
+    });
+    
+    return originalSet.call(this, _.omit(attrs, relNames), options);
+  };
 
   var originalValidate = model.prototype.validate;
   model.prototype.validate = function(attrs, options) {
@@ -239,26 +270,17 @@ var mixinLoopback = function(client, model, settings) {
   model.prototype.toJSON = function(options) {
     options || (options = {});
     var json = this.attributes.toJSON(options);
-
     if (options.include) {
       var self = this;
-      var cached = this.__cachedRelations || {};
-      var daoCached = this.dao.__cachedRelations || {};
       var modelRelations = this.constructor.loopback.relations;
-
       var relations = _.pluck(modelRelations, 'name');
       if (_.isArray(options.include)) {
         relations = _.intersection(options.include, relations);
       }
-
       _.each(relations, function(name) {
-        var related = cached[name] || daoCached[name];
+        var related = self[name];
         if (_.isFunction(related.toJSON)) {
           json[name] = related.toJSON();
-        } else if (_.isArray(related)) {
-          json[name] = _.map(related, function(r) {
-            return r.toJSON ? r.toJSON() : r;
-          });
         }
       });
     }
@@ -316,20 +338,38 @@ var mixinLoopback = function(client, model, settings) {
   });
 
   model.Collection = model.Collection || Backbone.Collection.extend({ model: model });
+  
+  var originalInitialize = model.Collection.prototype.initialize;
+  model.Collection.prototype.initialize = function(attributes, options) {
+    var collection = this;
+    this.resolved = false;
+    this.on('add remove change reset', function() {
+      collection.resolved = false;
+    });
+    this.on('sync', function() {
+      collection.resolved = true;
+    });
+    originalInitialize.apply(this, arguments);
+  };
 
   model.Collection.find = function(query, cb) {
+    var collection = new this();
+    return collection.resolve.apply(collection, arguments);
+  };
+  
+  model.Collection.prototype.resolve = function(query, cb) {
     if (arguments.length === 1 && _.isFunction(query)) {
       cb = query, query = {};
     }
     query = query ? _.clone(query) : {};
+    var collection = this;
     return returnPromise(function(done) {
-      var collection = new this();
       collection.fetch(query).done(function() {
         done(null, collection);
       }).fail(function(err) {
         done(err, collection);
       });
-    }, cb, this);
+    }, cb);
   };
 
   model.Collection.prototype.sync = function(method, collection, options) {
@@ -353,7 +393,15 @@ var mixinLoopback = function(client, model, settings) {
       case 'read':
         // reset comparator if explicit order is given
         if (!_.isEmpty(options.order)) collection.comparator = null;
-        Model.find(_.pick(options, params), function(err, instances) {
+        var finder;
+        if (collection.relation) {
+          var name = collection.relation.name;
+          finder = collection.rel;
+          if (!finder) throw new Error('Invalid relation: ' + rel.name);
+        } else {
+          finder = Model.find.bind(Model);
+        }
+        finder(_.pick(options, params), function(err, instances) {
           if (err || _.isEmpty(instances)) return handleResponse(err, []);
           handleResponse(null, instances.map(function(inst) {
             return inst.toObject ? inst.toObject() : inst;
