@@ -26,7 +26,15 @@ Todo.find({ where: { completed: true } }).done(function(todos) {
 });
 
 User.findById(3).done(function(user) {
-  // relation accessors return collections
+  user.todos.fetch().done(function(todos) { // hasMany relation
+    console.log(todos instanceof Todo.Collection); // true
+    console.log(todos.at(0).get('title')); // Todo 1
+    console.log(user.toJSON({ include: true })); // { ..., todos: [...] }
+  });
+});
+
+User.findById(3).done(function(user) {
+  // query the relation - returns a separate collection
   user.todos.query({ where: { completed: true } }).done(function(todos) {
     console.log(todos instanceof Todo.Collection); // true
     console.log(todos.at(0).get('title')); // Todo 1
@@ -36,6 +44,13 @@ User.findById(3).done(function(user) {
 
 User.findById(3, { include: 'todos' }).done(function(user) {
   console.log(user.toJSON({ include: true })); // { ..., todos: [...] }
+});
+
+Todo.findById('t-1234').done(function(todo) {
+  todo.user.fetch().done(function(user) { // belongsTo relation
+    console.log(user instanceof User); // true
+    console.log(todo.toJSON({ include: true })); // { ..., user: [...] }
+  });
 });
 
 ```
@@ -65,7 +80,6 @@ Run `npm install` and `bower install`. Then try `npm test`.
 - proper documentation - see also: Usage.md
 - bring the example up to par with loopback-example-full-stack
 - complete this project into a proper TodoMVC-type Backbone app
-- only relations of type 'multiple' are handled at the moment
 - properly handle the restApiUrl for the test environment
 - refactor mixinLoopback into seperate Model and Collection mixins
 - export mixinLoopback as a helper method
