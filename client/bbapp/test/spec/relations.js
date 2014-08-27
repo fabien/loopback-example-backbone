@@ -100,6 +100,7 @@ describe('Relations', function() {
   
     it('should implement `create` on a relation collection - wait/promise', function(done) {
       user.todos.create({ title: 'Todo 1' }, { wait: true }).done(function(todo) {
+        ids.todo1 = todo.id;
         todo.should.be.instanceof(Todo);
         todo.isNew().should.be.false;
         todo.id.should.match(/^t-(\d+)$/);
@@ -225,6 +226,90 @@ describe('Relations', function() {
       });
     });
   
+  });
+  
+  describe('singular', function() {
+    
+    var todo, cached;
+    
+    it('should return a proxy for a relation - promise', function(done) {
+      Todo.findById(ids.todo1, function(err, t) {
+        todo = t;
+        todo.user.model.should.equal(User);
+        todo.user.instance.should.equal(todo);
+        todo.user.relation.name.should.equal('user');
+        todo.user.rel.should.be.a.function;
+        todo.user.resolved.should.be.false;
+        done();
+      });
+    });
+    
+    it('should resolve a relation - promise', function(done) {
+      todo.user.fetch().done(function(user) { // fetch === resolve
+        cached = user;
+        user.should.be.instanceof(User);
+        user.get('name').should.equal('fred');
+        done();
+      });
+    });
+    
+    it('should resolve a relation from cache - callback cached', function(done) {
+      todo.user.resolve(function(err, user) {
+        user.should.equal(cached); // cached
+        should.not.exist(err);
+        user.should.be.instanceof(User);
+        user.get('name').should.equal('fred');
+        done();
+      });
+    });
+    
+    it('should resolve a relation - reset', function(done) {
+      todo.user.resolve({ reset: true }).done(function(user) {
+        user.should.not.equal(cached); // not cached
+        user.should.be.instanceof(User);
+        user.get('name').should.equal('fred');
+        done();
+      });
+    });
+    
+    it('should implement `build` on a relation collection', function() {
+      var user = new Todo().user.build({ name: 'Wilma' });
+      user.isNew().should.be.true;
+      user.should.be.instanceof(User);
+    });
+    
+    it('should implement `create` on a relation - wait/promise', function(done) {
+      todo = new Todo({ title: 'Some errand' });
+      todo.save().done(function(todo) {
+        todo.isNew().should.be.false;
+        
+        todo.user.create({ name: 'Wilma' }, { wait: true }).done(function(user) {
+          user.isNew().should.be.false;
+          user.should.be.instanceof(User);
+          user.id.should.not.be.empty;
+          user.get('name').should.equal('Wilma');
+          
+          ids.user = user.id;
+          
+          done();
+        });
+      });
+    });
+    
+    it('should have created a related entry - verify', function(done) {
+      User.findById(ids.user, function(err, user) {
+        user.should.be.instanceof(User);
+        user.get('name').should.equal('Wilma');
+        
+        user.todos.fetch().done(function(todos) {
+          todos.should.be.instanceof(Todo.Collection);
+          todos.length.should.equal(1);
+          todos.pluck('id').should.eql([todo.id]);
+          done();
+        });
+      });
+    });
+    
   });
   
 });

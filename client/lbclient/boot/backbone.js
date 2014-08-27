@@ -1,14 +1,14 @@
 var utils = require('loopback-datasource-juggler/lib/utils');
 
+// TODO [fabien] - refactor this; it's not exactly a thing of beauty ...
+
 module.exports = function(client) {
-  
-  
   
   var models = client.backbone = {};
   
-  // TODO: MERGE model.settings.backbone.model backbone.collection
+  // TODO: merge model.settings.backbone.model backbone.collection
   // to extend with
-
+  
   _.each(client.models(), function(model) {
     var name = model.modelName;
     models[name] = Backbone.Model.extend({}, { modelName: name });
@@ -124,7 +124,13 @@ var mixinLoopback = function(client, model, settings) {
         
         create: function(model, options) {
           options = options ? _.clone(options) : {};
-          if (!(model = this._prepareModel(model, options))) return false;
+          var dfd = options.wait ? $.Deferred() : null;
+          
+          if (!(model = this._prepareModel(model, options))) {
+            if (dfd) dfd.reject(new Error('Invalid model'), model);
+            return dfd ? dfd.promise() : false;
+          }
+          
           if (!options.wait) this.add(model, options);
           var collection = this;
           var success = options.success;
@@ -132,7 +138,7 @@ var mixinLoopback = function(client, model, settings) {
             if (options.wait) collection.add(model, options);
             if (success) success(model, resp, options);
           };
-          var dfd = options.wait ? $.Deferred() : null;
+          
           this.rel.create(model.toJSON(), function(err, inst) {
             if (err) {
               if (options.error) options.error(err);
@@ -144,6 +150,7 @@ var mixinLoopback = function(client, model, settings) {
               if (dfd) dfd.resolve(model);
             }
           });
+          
           return dfd ? dfd.promise() : model;
         },
         
@@ -154,7 +161,91 @@ var mixinLoopback = function(client, model, settings) {
         }
       });
     } else {
-      console.log('Relation type not implemented: ' + rel.type);
+      var resolve = function(options, cb) {
+        if (_.isFunction(options)) cb = options, options = {};
+        options || (options = {});
+        
+        var Model = this.model.loopback;
+        var self = this;
+        
+        if (options.reset) delete this.related;
+        if (this.related instanceof this.model) {
+          cb(null, this.related);
+        } else {
+          this.rel(function(err, resp) {
+            if (err) return cb(err, null);
+            var model = self.related = new self.model(resp);
+            cb(err, model, resp);
+          });
+        }
+      };
+      
+      var Proxy = function RelationProxy() {};
+      _.extend(Proxy.prototype, {
+        rel: backboneModel.dao[rel.name],
+        instance: backboneModel,
+        model: relModel,
+        relation: rel,
+        resolved: false,
+        
+        fetch: function(options) {
+          options || (options = {});
+          var dfd = $.Deferred();
+          resolve.call(this, options, function(err, model, resp) {
+            if (err) {
+              if (options.error) options.error(err);
+              dfd.reject(err);
+            } else {
+              if (options.success) options.success(model, resp);
+              dfd.resolve(model, resp);
+            }
+          });
+          return dfd.promise();
+        },
+        
+        resolve: function(options, cb) {
+          if (_.isFunction(options)) cb = options, options = {};
+          options || (options = {});
+          return returnPromise(function(done) {
+            resolve.call(this, options, done);
+          }, cb, this);
+        },
+        
+        build: function(attrs, options) {
+          var sample = this.rel.build({}).toObject();
+          return new this.model(_.extend({}, sample, attrs), options);
+        },
+        
+        create: function(model, options) {
+          options = options ? _.clone(options) : {};
+          var dfd = options.wait ? $.Deferred() : null;
+          
+          if (!model || !(model instanceof relModel)) {
+            model = new relModel(model);
+          }
+          
+          if (!_.isEmpty(model.validate())) {
+            if (dfd) dfd.reject(new Error('Invalid model'), model);
+            return dfd ? dfd.promise() : false;
+          }
+          
+          this.rel.create(model.toJSON(), function(err, inst) {
+            if (err) {
+              if (options.error) options.error(err);
+              if (dfd) dfd.reject(err);
+            } else {
+              var attrs = inst.toObject();
+              model.set(attrs);
+              if (options.success) options.success(model, attrs);
+              if (dfd) dfd.resolve(model);
+            }
+          });
+          
+          return dfd ? dfd.promise() : model;
+        }
+        
+      });
+      return Proxy;
     }
   };
   
@@ -198,6 +289,14 @@ var mixinLoopback = function(client, model, settings) {
     get: function() { return this.dao; },
     set: function(attrs) { this.dao = attrs; }
   });
+  
+  var originalParse = model.prototype.parse;
+  model.prototype.parse = function(response, options) {
+    if (_.isObject(response) && _.isFunction(response.toObject)) {
+      response = response.toObject();
+    }
+    return originalParse.call(this, response, options);
+  };
   
   var originalSet = model.prototype.set;
   model.prototype.set = function(key, val, options) {
