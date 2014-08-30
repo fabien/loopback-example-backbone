@@ -2,8 +2,6 @@
 
 describe('Backbone', function() {
   
-  // TODO: PATCH SUPPORT
-  
   var Todo = client.backbone.LocalTodo;
   
   Todo.Collection.prototype.comparator = 'created';
@@ -256,6 +254,20 @@ describe('Backbone', function() {
       todos.at(0).get('title').should.equal('Todo C');
       todos.at(1).get('title').should.equal('Todo A');
       done();
+    });
+  });
+  
+  it('should update a Backbone.Model instance - patch option', function(done) {
+    Todo.findById(ids.todoA, function(err, todo) {
+      var promise = todo.save({ title: 'Todo A - Updated' }, { patch: true });
+      promise.done(function(resp) {
+        resp.should.equal(todo);
+        todo.get('title').should.equal('Todo A - Updated');
+        new Todo({ id: todo.id }).fetch().done(function(resp) {
+          resp.get('title').should.equal('Todo A - Updated');
+          done();
+        });
+      });
     });
   });
 

@@ -3,10 +3,10 @@ module.exports = function(Todo) {
   Todo.definition.properties.created.default = Date.now;
 
   Todo.beforeSave = function(next, model) {
-    if (!model.id) { // semi-stable sorting ids:
+    if (!this.id) { // semi-stable sorting ids:
       var prefix = Number(Date.now()).toString().slice(-4);
       var suffix = Math.floor(Math.random() * 10000).toString().slice(4);
-      model.id = 't-' + prefix + suffix;
+      this.id = 't-' + prefix + suffix;
     }
     next();
   };

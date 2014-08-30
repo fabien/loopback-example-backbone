@@ -91,7 +91,8 @@ var mixinLoopback = function(client, model, settings) {
     }, cb, this);
   };
 
-  model.prototype.idAttribute = LoopbackModel.definition.idName() || 'id';
+  var idName = LoopbackModel.definition.idName() || 'id';
+  model.prototype.idAttribute = idName;
   
   var proxyForRelation = function(backboneModel, relationName) {
     var relations = backboneModel.constructor.loopback.relations || {};
@@ -445,6 +446,12 @@ var mixinLoopback = function(client, model, settings) {
       case 'create':
       case 'update':
         model.dao.save(function(err, inst) {
+          handleResponse(err, err ? {} : inst.toObject());
+        });
+        break;
+      case 'patch':
+        var attrs = model.changedAttributes();
+        model.dao.updateAttributes(attrs, function(err, inst) {
           handleResponse(err, err ? {} : inst.toObject());
         });
         break;
